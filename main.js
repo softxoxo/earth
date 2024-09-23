@@ -71,20 +71,25 @@ function create3DText(text) {
     loader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', (font) => {
       const geometry = new TextGeometry(text, {
         font: font,
-        size: 0.15,
-        height: 0.03,
+        size: 0.05,  // Increased size for better visibility
+        height: 0.02,
       });
-      const material = new THREE.MeshBasicMaterial({ color: '#E6F8FF', transparent: true, opacity: 0 });
+      const material = new THREE.MeshBasicMaterial({
+        color: '#FFFFFF',  // Changed to white for better contrast
+        transparent: true,
+        opacity: 0
+      });
       const mesh = new THREE.Mesh(geometry, material);
       
       geometry.computeBoundingBox();
       const textWidth = geometry.boundingBox.max.x - geometry.boundingBox.min.x;
-      mesh.position.set(-textWidth / 4, 0, 0);
+      mesh.position.set(-textWidth / 2, 0, 0);
       
       resolve(mesh);
     });
   });
 }
+
 
 async function createLightPillar(country, lat, lon, color = 0xffffff) {
   const phi = (90 - lat) * (Math.PI / 180);
@@ -94,34 +99,35 @@ async function createLightPillar(country, lat, lon, color = 0xffffff) {
   const y = Math.cos(phi);
   const z = Math.sin(phi) * Math.sin(theta);
 
-  const pillarHeight = 0; // Start with no height
+  const pillarHeight =0.8;
   const pillarGeometry = new THREE.CylinderGeometry(0.05, 0.05, pillarHeight, 32, 1, true);
 
   const pillarMaterial = new THREE.ShaderMaterial({
     uniforms: {
       color: { value: new THREE.Color(color) },
-      glowIntensity: { value: 2.0 },
-      thickness: { value: 1.0 },
+      glowIntensity: { value: 3.0 },
+      hoverIntensity: { value: 0.0 },
     },
     vertexShader: `
-      uniform float thickness;
+      uniform float hoverIntensity;
       varying vec3 vPosition;
       varying vec2 vUv;
       void main() {
         vUv = uv;
         vPosition = position;
-        vec3 scaled = position * vec3(thickness, 1.0, thickness);
+        vec3 scaled = position * (1.0 + hoverIntensity * 0.1);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(scaled, 1.0);
       }
     `,
     fragmentShader: `
       uniform vec3 color;
       uniform float glowIntensity;
+      uniform float hoverIntensity;
       varying vec3 vPosition;
       varying vec2 vUv;
       void main() {
         float distanceFromCenter = abs(vUv.x - 0.5);
-        float intensity = exp(-distanceFromCenter * 10.0) * glowIntensity;
+        float intensity = exp(-distanceFromCenter * 10.0) * (glowIntensity + hoverIntensity);
         float lengthFalloff = smoothstep(0.0, 1.0, vUv.y) * smoothstep(1.0, 0.0, vUv.y);
         intensity *= lengthFalloff;
         gl_FragColor = vec4(color * intensity, intensity);
@@ -139,33 +145,29 @@ async function createLightPillar(country, lat, lon, color = 0xffffff) {
   pillar.scale.setScalar(1.01);
 
   const label = await create3DText(country);
-  label.position.set(0, 0, 0.6);
-  label.scale.setScalar(0.3);
+  label.material.opacity = 0; // Start with invisible label
+  label.material.transparent = true;
   
   const labelContainer = new THREE.Object3D();
   labelContainer.add(label);
-  labelContainer.position.copy(pillar.position);
-  labelContainer.lookAt(0, 0, 0);
-  labelContainer.rotateY(Math.PI);
   
+  const pillarTopPosition = new THREE.Vector3(x, y, z).normalize().multiplyScalar(1.01 + pillarHeight / 1.6);
+  labelContainer.position.copy(pillarTopPosition);
+
   const group = new THREE.Group();
   group.add(pillar);
   group.add(labelContainer);
   group.userData = { country: country };
 
-  // Animate pillar rising
-  gsap.to(pillarGeometry.parameters, {
-    height: 1.5,
+  gsap.from(pillar.scale, {
+    y: 0,
     duration: 2,
-    ease: "power2.out",
-    onUpdate: () => {
-      pillar.geometry.dispose();
-      pillar.geometry = new THREE.CylinderGeometry(0.05, 0.05, pillarGeometry.parameters.height, 32, 1, true);
-    }
+    ease: "power2.out"
   });
 
   return group;
 }
+
 
 
 const countries = [
@@ -183,17 +185,7 @@ Promise.all(countries.map(country =>
   createLightPillar(country.name, country.lat, country.lon, country.color)
 )).then(groups => {
   groups.forEach(group => earthGroup.add(group));
-  
-  // Populate country list
-  const countryListUl = document.getElementById('country-list-ul');
-  countries.forEach((country, index) => {
-    const li = document.createElement('li');
-    li.textContent = country.name;
-    li.style.color = '#' + country.color.toString(16).padStart(6, '0');
-    li.addEventListener('click', () => focusOnCountry(index));
-    countryListUl.appendChild(li);
-  });
-  
+  checkIntersections();
   animate();
 });
 
@@ -273,12 +265,20 @@ function checkIntersections() {
   raycaster.setFromCamera(mouse, camera);
   const intersects = raycaster.intersectObject(earthMesh, true);
 
-  if (hoveredGroup) {
-    gsap.to(hoveredGroup.children[0].material.uniforms.thickness, { value: 1.0, duration: 0.3 });
-    gsap.to(hoveredGroup.children[0].material.uniforms.glowIntensity, { value: 2.0, duration: 0.3 });
-    gsap.to(hoveredGroup.children[1].children[0].material, { opacity: 0, duration: 0.3 });
-    hoveredGroup = null;
-  }
+  // Reset all pillars
+  earthGroup.children.forEach(group => {
+    if (group.userData && group.userData.country) {
+      const pillar = group.children.find(child => child.type === "Mesh" && child.geometry.type === "CylinderGeometry");
+      const label = group.children.find(child => child.type === "Object3D")?.children[0];
+
+      if (pillar && pillar.material.uniforms) {
+        gsap.to(pillar.material.uniforms.hoverIntensity, { value: 0.0, duration: 0.3 });
+      }
+      if (label) {
+        gsap.to(label.material, { opacity: 0, duration: 0.3 });
+      }
+    }
+  });
 
   if (intersects.length > 0) {
     const intersectedPoint = intersects[0].point;
@@ -291,20 +291,55 @@ function checkIntersections() {
     }, null);
 
     if (closestPillar && closestPillar.distance < 0.5) {
-      hoveredGroup = closestPillar.obj;
-      gsap.to(hoveredGroup.children[0].material.uniforms.thickness, { value: 2.0, duration: 0.3 });
-      gsap.to(hoveredGroup.children[0].material.uniforms.glowIntensity, { value: 4.0, duration: 0.3 });
-      gsap.to(hoveredGroup.children[1].children[0].material, { opacity: 1, duration: 0.3 });
+      const pillar = closestPillar.obj.children.find(child => child.type === "Mesh" && child.geometry.type === "CylinderGeometry");
+      const label = closestPillar.obj.children.find(child => child.type === "Object3D")?.children[0];
+
+      if (pillar && pillar.material.uniforms) {
+        gsap.to(pillar.material.uniforms.hoverIntensity, { value: 2.0, duration: 0.3 });
+      }
+      if (label) {
+        gsap.to(label.material, { opacity: 1, duration: 0.3 }); // Make label visible
+      }
     }
   }
 }
+
+function handleListItemHover(country, isHovering) {
+  earthGroup.children.forEach(group => {
+    if (group.userData && group.userData.country === country) {
+      const pillar = group.children.find(child => child.type === "Mesh" && child.geometry.type === "CylinderGeometry");
+      const label = group.children.find(child => child.type === "Object3D")?.children[0];
+
+      const hoverIntensity = isHovering ? 2.0 : 0.0;
+
+      if (pillar && pillar.material.uniforms) {
+        gsap.to(pillar.material.uniforms.hoverIntensity, { value: hoverIntensity, duration: 0.3 });
+      }
+      if (label && label.material) {
+        gsap.to(label.material, { opacity: isHovering ? 1 : 0, duration: 0.3 }); // Toggle label visibility
+      }
+    }
+  });
+}
+
+
+
+const countryListUl = document.getElementById('country-list-ul');
+countries.forEach((country, index) => {
+  const li = document.createElement('li');
+  li.textContent = country.name;
+  li.style.color = '#' + country.color.toString(16).padStart(6, '0');
+  li.addEventListener('click', () => focusOnCountry(index));
+  li.addEventListener('mouseenter', () => handleListItemHover(country.name, true));
+  li.addEventListener('mouseleave', () => handleListItemHover(country.name, false));
+  countryListUl.appendChild(li);
+});
+
 function animate() {
   requestAnimationFrame(animate);
   cloudsMesh.rotation.y += 0.0002;
   glowMesh.rotation.y += 0.002;
   stars.rotation.y -= 0.0002;
-  
-  checkIntersections();
   
   if (isMoving) {
     stars.material.opacity = Math.min(stars.material.opacity + 0.05, 1);
@@ -312,10 +347,19 @@ function animate() {
     stars.material.opacity = Math.max(stars.material.opacity - 0.05, 0);
   }
   
+  // Update label orientations to face the camera
+  earthGroup.children.forEach(group => {
+    if (group.userData && group.userData.country) {
+      const labelContainer = group.children[1];
+      labelContainer.quaternion.copy(camera.quaternion);
+    }
+  });
+  
+  checkIntersections(); // Add this line to continuously check for intersections
+  
   controls.update();
   renderer.render(scene, camera);
 }
-
 function handleWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
