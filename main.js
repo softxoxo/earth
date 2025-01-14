@@ -10,7 +10,7 @@ const w = window.innerWidth;
 const h = window.innerHeight;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(35, w / h, 0.1, 1000);
-camera.position.z = 5;
+camera.position.z = 3.5;
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(w, h);
 document.body.appendChild(renderer.domElement);
@@ -30,6 +30,9 @@ const material = new THREE.MeshPhongMaterial({
   specularMap: loader.load("./textures/02_earthspec1k.jpg"),
   bumpMap: loader.load("./textures/01_earthbump1k.jpg"),
   bumpScale: 0.04,
+  // Add color and adjustments for grayscale look
+  color: 0x808080, // Medium gray base color
+  saturation: 0,   // Reduce saturation
 });
 const earthMesh = new THREE.Mesh(geometry, material);
 earthGroup.add(earthMesh);
@@ -37,7 +40,10 @@ earthGroup.add(earthMesh);
 const lightsMat = new THREE.MeshBasicMaterial({
   map: loader.load("./textures/03_earthlights1k.jpg"),
   blending: THREE.AdditiveBlending,
+  color: 0xffffff, // Pure white for lights
+  opacity: 0.5     // Slightly reduced opacity
 });
+
 const lightsMesh = new THREE.Mesh(geometry, lightsMat);
 earthGroup.add(lightsMesh);
 
@@ -47,7 +53,9 @@ const cloudsMat = new THREE.MeshStandardMaterial({
   opacity: 0.8,
   blending: THREE.AdditiveBlending,
   alphaMap: loader.load('./textures/05_earthcloudmaptrans.jpg'),
+  color: 0xe0e0e0  // Light gray for clouds
 });
+
 const cloudsMesh = new THREE.Mesh(geometry, cloudsMat);
 cloudsMesh.scale.setScalar(1.003);
 earthGroup.add(cloudsMesh);
@@ -61,7 +69,7 @@ const stars = getStarfield({numStars: 2000});
 stars.material.transparent = true;
 scene.add(stars);
 
-const sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
+const sunLight = new THREE.DirectionalLight(0xf0f0f0, 2.0); 
 sunLight.position.set(-2, 0.5, 1.5);
 scene.add(sunLight);
 
@@ -155,11 +163,11 @@ function createLightPillar(country, lat, lon, color = 0xffffff) {
 
 
 const countries = [
-  { name: "USA", lat: 37.0902, lon: -95.7129, color: "#E6F8FF" },
-  { name: "China", lat: 35.8617, lon: 104.1954, color: "#E6F8FF" },
-  { name: "Russia", lat: 61.5240, lon: 105.3188, color: "#E6F8FF" },
-  { name: "Brazil", lat: -14.2350, lon: -51.9253, color: "#E6F8FF" },
-  { name: "Australia", lat: -25.2744, lon: 133.7751, color: "#E6F8FF" },
+  { name: "USA", lat: 37.0902, lon: -95.7129, color: "#e0e0e0" },
+  { name: "China", lat: 35.8617, lon: 104.1954, color: "#d0d0d0" },
+  { name: "Russia", lat: 61.5240, lon: 105.3188, color: "#c0c0c0" },
+  { name: "Brazil", lat: -14.2350, lon: -51.9253, color: "#b0b0b0" },
+  { name: "Australia", lat: -25.2744, lon: 133.7751, color: "#a0a0a0" },
 ];
 
 let currentFocusedGroup = null;
@@ -178,10 +186,10 @@ function focusOnCountry(index) {
   const phi = (90 - country.lat) * (Math.PI / 180);
   const theta = (country.lon + 180) * (Math.PI / 180);
 
-  const x = -Math.sin(phi) * Math.cos(theta) * 8;
-  const y = Math.cos(phi) * 3;
-  const z = Math.sin(phi) * Math.sin(theta) * 3;
-
+  const x = -Math.sin(phi) * Math.cos(theta) * 8; // Changed from 8 to 5
+  const y = Math.cos(phi) * 3; // Changed from 3 to 2
+  const z = Math.sin(phi) * Math.sin(theta) * 3; // Changed from 3 to 2
+  
   // Reset previous focused group
   if (currentFocusedGroup) {
     const pillar = currentFocusedGroup.children[0];
@@ -301,23 +309,23 @@ countries.forEach((country, index) => {
   countryListUl.appendChild(li);
 });
 
-function animate() {
+function animate(currentTime) {
   requestAnimationFrame(animate);
+  
   cloudsMesh.rotation.y += 0.0002;
   glowMesh.rotation.y += 0.002;
-  stars.rotation.y -= 0.0002;
   
-  if (isMoving) {
-    stars.material.opacity = Math.min(stars.material.opacity + 0.05, 1);
-  } else {
-    stars.material.opacity = Math.max(stars.material.opacity - 0.05, 0);
-  }
+  // Pass camera to updateStarVisibility
+  stars.updateStarVisibility(isMoving, currentTime, camera);
   
   checkIntersections();
   
   controls.update();
   renderer.render(scene, camera);
 }
+
+animate(); // Start with currentTime = 0
+
 function handleWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
