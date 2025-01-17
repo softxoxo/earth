@@ -4,35 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Interactive Earth Visualization</title>
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-        }
-        #country-list {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background-color: rgba(0, 0, 0, 0.5);
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
-        }
-        #country-list h3 {
-            margin-top: 0;
-        }
-        #country-list ul {
-            list-style-type: none;
-            padding: 0;
-        }
-        #country-list li {
-            cursor: pointer;
-            padding: 5px 0;
-        }
-        #country-list li:hover {
-            text-decoration: underline;
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css">
     <script type="importmap">
         {
             "imports": {
@@ -43,10 +15,14 @@
     </script>
 </head>
 <body>
-    <div id="country-list">
-        <h3>Countries</h3>
-        <ul id="country-list-ul"></ul>
+    <div id="organizations-list">
+        <button class="organization-btn" data-org="BRICS">БРИКС</button>
+        <button class="organization-btn" data-org="SCO">ШОС</button>
+        <button class="organization-btn" data-org="CIS">СНГ</button>
+        <button class="organization-btn" data-org="EAEU">ЕАЭС</button>
+        <button class="organization-btn" data-org="APEC">АТЭС</button>
     </div>
+    <div id="country-list"></div>
     <script type="module" src="main.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
 </body>
